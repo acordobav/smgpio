@@ -204,129 +204,34 @@ int digitalRead(int pin)
     return ivalue;
 }
 
-int gpioISR(int pin, int mode, void (*function)(void))
-{
-    pthread_t threadId;
-    char fName[64];
-    char pinS[8];
-    int count, i;
-    char c;
+pthread_t blink(int pin, int freq, int duration) {
+    pinMode(pin, OUTPUT);
 
-    if ((pin < 0) || (pin > 63))
-    {
-        perror("Pin number must be 0-63");
-        exit(1);
-    }
+    BlinkData* data = malloc(sizeof(*data));
+    data->pin = pin;
+    data->freq = freq;
+    data->duration = duration;
 
-    // The edge is configured
-    setEdge(pin, mode);
-
-    // Get the file descriptor of the value file
-    if (sysFds[pin] == -1)
-    {
-        int fd = openPinFile(pin, "/value");
-        sysFds[pin] = fd;
-    }
-
-    // Clear any initial pending interrupt
-
-    ioctl(sysFds[pin], FIONREAD, &count);
-    for (i = 0; i < count; ++i)
-        read(sysFds[pin], &c, 1);
-
-    isrFunctions[pin] = function;
-
-    pthread_mutex_lock(&pinMutex);
-    pinPass = pin;
-    pthread_create(&threadId, NULL, interruptHandler, NULL);
-    while (pinPass != -1)
-        delay(1);
-    pthread_mutex_unlock(&pinMutex);
-
-    return 0;
+    pthread_t id;
+    pthread_create(&id, NULL, blink_aux, data);
+    return id;
 }
 
-static void *interruptHandler(void *arg)
-{
-    int myPin;
 
-    myPin = pinPass;
-    pinPass = -1;
+void* blink_aux(void* blink_data) {
+    BlinkData* data = blink_data;
 
-    for (;;)
-        if (waitForInterrupt(myPin, -1) > 0)
-            isrFunctions[myPin]();
+    int state = LOW;
+    time_t endwait = time(NULL) + data->duration;
+    while(time(NULL) < endwait) {
+        if (state == LOW)
+            state = HIGH;
+        else
+            state = LOW;
 
-    return NULL;
+        digitalWrite(data->pin, state);
+        sleep(data->freq);
+    }
+
+    free(blink_data);
 }
-
-int waitForInterrupt(int pin, int mS)
-{
-    int fd, x;
-    uint8_t c;
-    struct pollfd polls;
-
-    if ((fd = sysFds[pin]) == -1)
-        return -2;
-
-    // Setup poll structure
-
-    polls.fd = fd;
-    polls.events = POLLPRI | POLLERR;
-
-    // Wait for it ...
-
-    x = poll(&polls, 1, mS);
-
-    if (x > 0)
-    {
-        lseek(fd, 0, SEEK_SET); // Rewind
-        (void)read(fd, &c, 1);  // Read & clear
-    }
-
-    return x;
-}
-
-void delay(unsigned int howLong)
-{
-    struct timespec sleeper, dummy;
-
-    sleeper.tv_sec = (time_t)(howLong / 1000);
-    sleeper.tv_nsec = (long)(howLong % 1000) * 1000000;
-
-    nanosleep(&sleeper, &dummy);
-}
-
-void setEdge(int pin, int mode)
-{
-    if ((pin < 0) || (pin > 63))
-    {
-        perror("Pin number must be 0-63");
-        exit(1);
-    }
-
-    if ((mode != INT_EDGE_BOTH) &&
-        (mode != INT_EDGE_RISING) &&
-        (mode != INT_EDGE_FALLING))
-    {
-        perror("Invalid mode: Edge should be rising, falling or both");
-        exit(1);
-    }
-
-    // The edge file is obtained
-    int fd = openPinFile(pin, "/edge");
-
-    // Writing the edge value
-    char* smode = "none\n";
-    if(mode == INT_EDGE_FALLING) smode = "falling\n";
-    else if(mode == INT_EDGE_RISING) smode = "rising\n";
-    else if(mode == INT_EDGE_BOTH) smode = "both\n";
-
-    if (write(fd, smode, strlen(smode)) < 0)
-    {
-        perror("Unable to set the edge value");
-        exit(1);
-    }
-
-    close(fd);
-}   

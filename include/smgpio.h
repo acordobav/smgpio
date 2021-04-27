@@ -8,11 +8,8 @@
 #include <unistd.h>
 
 #include <string.h>
-#include <sys/ioctl.h>
 
-#include <poll.h>
-#include <stdint.h>
-#include <sys/wait.h>
+#include <time.h>
 #include <pthread.h>
 
 #define INPUT 0
@@ -20,10 +17,6 @@
 
 #define LOW 0
 #define HIGH 1
-
-#define INT_EDGE_FALLING 0
-#define INT_EDGE_RISING 1
-#define INT_EDGE_BOTH 2
 
 // sysFds:
 //	Map a file descriptor from the /sys/class/gpio/gpioX/value
@@ -34,13 +27,6 @@ static int sysFds [64] =
   -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
 } ;
-
-// ISR Data
-static void (*isrFunctions [64])(void) ;
-
-static volatile int pinPass = -1 ;
-
-static pthread_mutex_t pinMutex = PTHREAD_MUTEX_INITIALIZER;
 
 /**
  * Function to export a GPIO
@@ -87,10 +73,22 @@ char *getPinFileName(int pin, char *name);
 **/
 int openPinFile(int pin, char *name);
 
-int waitForInterrupt(int pin, int mS);
-static void *interruptHandler(void *arg);
-int gpioISR(int pin, int mode, void (*function)(void));
-void delay (unsigned int howLong);
 
+/**
+ * Creates a thread that generates a blink of a specific 
+ * duration, every interval of time
+ * pin: gpio number of the pin
+ * freq: interval of time between blinks
+ * duration: how low should be the blink
+ * returns: thread id
+**/
+pthread_t blink(int pin, int freq, int duration);
 
-void setEdge(int pin, int mode);
+typedef struct blinkData
+{
+  int pin;
+  int freq; 
+  int duration;
+} BlinkData;
+
+void* blink_aux(void* blink_data);

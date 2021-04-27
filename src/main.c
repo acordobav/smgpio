@@ -1,9 +1,5 @@
 #include <smgpio.h>
 
-void test(void) {
-    printf("Interrupted!\n");
-}
-
 int main() {
     // Test the function to established the mode
     pinMode(22, OUTPUT);
@@ -17,12 +13,9 @@ int main() {
     int value = digitalRead(22);
 
     if(value != HIGH) {
-        perror("Error on digital read/write");
+        printf("Error on digital read/write\n");
         exit(1);
     }
-
-    // Test the ISR functionality
-    gpioISR(16, INT_EDGE_RISING, &test);
 
     // Test the unexport
     unexportGpio(16);
